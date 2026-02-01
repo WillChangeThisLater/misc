@@ -9,6 +9,7 @@ class BiDiClient {
 
     public constructor(socket: WebSocket) {
 
+        debugger;
         this.socket = socket
 
         // add an event listener on the socket

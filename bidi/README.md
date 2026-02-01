@@ -6,6 +6,7 @@ I worked with some unfamiliar tech:
   * Javascript Promises. Promises are a low level primitive that enables async communication
   * NodeJS and the NodeJS debugger. I had heard a ton about NodeJS over the years but hadn't worked with it until today
   * Websockets. Websockets allow you to create persistent, long lived bi-directional connections between machines. Another technology I had heard a ton about but never used.
+  * Typescript. I have seen this all over at work but haven't worked with it before today
 
 
 Braindump:
@@ -46,9 +47,87 @@ Braindump:
           3 console.log("goodbye");
     ```
 
+    here's the weird part: when you run `node inspect`, you also get a debugger listening on a websocket port. You can navigate to it by going to chrome, navigating to about://inspect, and looking for `client.ts` under remote targets. click on tha t, and you'll get a nice debugging UI + devtools
 
+    here's the weirder part: these debuggers actually seem to have different power levels. the chrome based once seems to be more powerful. for instance: say i throw a `debugger` statement in the middle of my BidiClient class
+    (ignore the typescript for now! i wrote this out of order)
 
-  * Creating a websocket really was not too bad. The core piece is an initial HTTP POST requset which establishes the session and suggests to the driver client to switch over communication to websockets. The driver responds with a websocket URI the client can connect to for 'talking websocket'
+    ```typescript
+    class BiDiClient {
+    
+        pending = new Map();
+        id: number = 0;
+        socket: WebSocket;
+    
+        public constructor(socket: WebSocket) {
+    
+            debugger;
+            this.socket = socket
+    
+            // add an event listener on the socket
+            // big assumption here is that the socket is open for business
+            // bad things can happen if not
+    	this.socket.addEventListener("message", event => {
+                const msg = JSON.parse(event.data)
+                if (msg.id != null) {
+                    const resolve = this.pending.get(msg.id)
+                    if (resolve) {
+                        this.pending.delete(msg.id)
+                        resolve(msg)
+                    }
+                }
+            });
+        }
+    
+    
+        public send(method: string, params: any = {}): Promise<any> {
+            this.id += 1;
+            const id = this.id
+            const payload = { id, method, params }
+            this.socket.send(JSON.stringify(payload));
+            return new Promise((resolver) => this.pending.set(this.id, resolver))
+        }
+    }
+    ```
+
+    if i run this in the node interactive REPL, i don't have any references to the BidiClient instance I just spun up.
+
+    ```bash
+    paul-MS-7E16% ./run.sh
+    No process found for: node client.ts
+    No Gecko WebDriver process found on port 4444
+    No browser process found listening on port 9222
+    Starting Gecko WebDriver...
+    < Debugger listening on ws://127.0.0.1:9229/dc69170c-a19b-4ba0-ba02-0e49393ef2c7
+    < For help, see: https://nodejs.org/en/docs/inspector
+    <
+    connecting to 127.0.0.1:9229 ... ok
+    < Debugger attached.
+    <
+    < (node:2291543) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/paul/misc/bidi/client.ts is not specified and it doesn't parse as CommonJS.
+    < Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+    < To eliminate this warning, add "type": "module" to /home/paul/misc/bidi/package.json.
+    < (Use `node --trace-warnings ...` to show where the warning was created)
+    <
+    Break on start in node_modules/ws/wrapper.mjs:1
+    > 1 import createWebSocketStream from './lib/stream.js';
+      2 import Receiver from './lib/receiver.js';
+      3 import Sender from './lib/sender.js';
+    debug> c
+    < gecko connection established on ws://127.0.0.1:9222/session/056ebe7a-9a57-4acb-91f7-86468635d026 <
+    break in client.ts:12
+     10            constructor(socket           ) {
+     11
+    >12         debugger;
+     13         this.socket = socket
+     14
+    debug> console.log(this.id);
+    undefined
+    ```
+
+    but if i open up the same thing in chrome devtools and run from their breakpoint, my references work fine! not sure why the chrome debugger is more powerful but seems like that's the one to use
+
+  * Creating a websocket really was not too bad. The core piece is an initial HTTP POST requset to a `/session` establishes the session and suggests to the driver client to switch over communication to websockets. The driver responds with a websocket URI the client can connect to for 'talking websocket'
 
   * Websocket is funky. Working with websockets gave me a really nice taste of what async programming is like in javascript. The really interesting thing here (and the meat of the problem) is the async communication that happens between the websockets. This works via event listeners, which listen for particular events to pass through the socket. The key ones are:
 
@@ -207,101 +286,103 @@ Braindump:
     speaking of the reading end: the logic here is pretty simple. whenever a message comes in from the driver, the message listener unpacks it to find the message id. it searches for said message id in the mapping and calls the relevant resolver function with the result. 
 
 
-ok i ended up going a little farther and moving this to typescript. typescript is honestly really nice to use, it feels like python a little bit. i have a strong preference for type hints and i generally like the look of typescript way more than javascript.
+  * implementing typescript was fun. i wrote some stream of conscious thoughts below
 
-the main extensions are pretty straightforward. similar to python, you can add types on arguments. so this:
-
-```javascript
-function add(a, b) { return a + b }
-```
-
-becomes this:
-
-```typescript
-function add(a: number, b: number): number {
-    return a + b
-}
-```
-
-the most difficult type i had to maneuver was `getClient(scheme: string, host: string, port: number): ???`
-i started by asking chatgpt, which give me the right answer:
-
-```typescript
-async function getClient(scheme: string, host: string, port: number): Promise<{ send: (method: string, params?: any = {}) => Promise<any> }> {
-}
-```
-
-* the thing that it returns is an object
-
-    ```typescript
-    {}
+    ok i ended up going a little farther and moving this to typescript. typescript is honestly really nice to use, it feels like python a little bit. i have a strong preference for type hints and i generally like the look of typescript way more than javascript.
+    
+    the main extensions are pretty straightforward. similar to python, you can add types on arguments. so this:
+    
+    ```javascript
+    function add(a, b) { return a + b }
     ```
-
-* that object has one function on it, 'send'
-
+    
+    becomes this:
+    
     ```typescript
-    { send }
-
+    function add(a: number, b: number): number {
+        return a + b
+    }
     ```
-* that 'send' function takes in a method and an optional params. that params can be anything but defaults to {}
-
+    
+    the most difficult type i had to maneuver was `getClient(scheme: string, host: string, port: number): ???`
+    i started by asking chatgpt, which give me the right answer:
+    
     ```typescript
-    { send: (method: string, params?: any = {}) }
-
-* send returns a promise. the promise will return a result. we will be lazy and just say 'any'
-
-    ```typescript
-    { send: (method: string, params?: any = {}) => Promise<any> }
-
-* getClient is an async function, so it always returns a promise. the promise's type is what we just said above ^
-
-    ```typescript
-    Promise<{ send: (method: string, params?: any = {}) => Promise<any> }>
+    async function getClient(scheme: string, host: string, port: number): Promise<{ send: (method: string, params?: any = {}) => Promise<any> }> {
+    }
     ```
-
-reading types does not "come naturally to me" - i had to sound this one out a couple times to really wrap my head around it
-
-the way you import modules is a little different. i let chatgpt handle that for now. newer versions of node can run typescript
-directly, so i was able to run `node client.ts` to run the client with no issues. the `node` repl is just pure javascript though.
-apparently there _are_ typescript based REPLs, but the one i tried to use was broken. i didn't prod further.
-
-usually ugly typehints are a sign you should be making classes. so i did.
-
-```typescript
-class BiDiClient {
-
-    pending = new Map();
-    id: number = 0;
-    socket: WebSocket;
-
-    public constructor(socket: WebSocket) {
-
-        this.socket = socket
-
-        // add an event listener on the socket
-        // big assumption here is that the socket is open for business
-        // bad things can happen if not
-	this.socket.addEventListener("message", event => {
-            const msg = JSON.parse(event.data)
-            if (msg.id != null) {
-                const resolve = this.pending.get(msg.id)
-                if (resolve) {
-                    this.pending.delete(msg.id)
-                    resolve(msg)
+    
+    * the thing that it returns is an object
+    
+        ```typescript
+        {}
+        ```
+    
+    * that object has one function on it, 'send'
+    
+        ```typescript
+        { send }
+    
+        ```
+    * that 'send' function takes in a method and an optional params. that params can be anything but defaults to {}
+    
+        ```typescript
+        { send: (method: string, params?: any = {}) }
+    
+    * send returns a promise. the promise will return a result. we will be lazy and just say 'any'
+    
+        ```typescript
+        { send: (method: string, params?: any = {}) => Promise<any> }
+    
+    * getClient is an async function, so it always returns a promise. the promise's type is what we just said above ^
+    
+        ```typescript
+        Promise<{ send: (method: string, params?: any = {}) => Promise<any> }>
+        ```
+    
+    reading types does not "come naturally to me" - i had to sound this one out a couple times to really wrap my head around it
+    
+    the way you import modules is a little different. i let chatgpt handle that for now. newer versions of node can run typescript
+    directly, so i was able to run `node client.ts` to run the client with no issues. the `node` repl is just pure javascript though.
+    apparently there _are_ typescript based REPLs, but the one i tried to use was broken. i didn't prod further.
+    
+    usually ugly typehints are a sign you should be making classes. so i did.
+    
+    ```typescript
+    class BiDiClient {
+    
+        pending = new Map();
+        id: number = 0;
+        socket: WebSocket;
+    
+        public constructor(socket: WebSocket) {
+    
+            this.socket = socket
+    
+            // add an event listener on the socket
+            // big assumption here is that the socket is open for business
+            // bad things can happen if not
+    	this.socket.addEventListener("message", event => {
+                const msg = JSON.parse(event.data)
+                if (msg.id != null) {
+                    const resolve = this.pending.get(msg.id)
+                    if (resolve) {
+                        this.pending.delete(msg.id)
+                        resolve(msg)
+                    }
                 }
-            }
-        });
+            });
+        }
+    
+    
+        public send(method: string, params: any = {}): Promise<any> {
+            this.id += 1;
+            const id = this.id
+            const payload = { id, method, params }
+            this.socket.send(JSON.stringify(payload));
+            return new Promise((resolver) => this.pending.set(this.id, resolver))
+        }
     }
-
-
-    public send(method: string, params: any = {}): Promise<any> {
-        this.id += 1;
-        const id = this.id
-        const payload = { id, method, params }
-        this.socket.send(JSON.stringify(payload));
-        return new Promise((resolver) => this.pending.set(this.id, resolver))
-    }
-}
-```
-
-this is pretty code.
+    ```
+    
+    this is pretty code.

@@ -43,32 +43,19 @@ cleanup() {
 
 }
 
-setup_automatic() {
-    # Step 3: Start Gecko WebDriver in the background and redirect logs
-    echo "Starting Gecko WebDriver..."
-    scripts/start_geckodriver.sh > /tmp/gecko_driver.log 2>&1 &
-    gecko_driver_pid=$!
-    
-    # Wait 3 seconds to ensure the Gecko WebDriver starts
-    sleep 3
-    
-    # Step 4: Run 'node client.ts' in the background
-    echo "Starting node client.ts..."
-    node client.ts &
-    client_pid=$!
-}
-
 setup_manual() {
-    # Step 3: Start Gecko WebDriver in the background and redirect logs
+
+    cleanup
+
     echo "Starting Gecko WebDriver..."
     scripts/start_geckodriver.sh > /tmp/gecko_driver.log 2>&1 &
     gecko_driver_pid=$!
     
-    # Wait 3 seconds to ensure the Gecko WebDriver starts
     sleep 3
     
-    # Step 4: Run 'node client.ts' in the background
     node inspect client.ts
+
+    cleanup
 }
 
 run() {
@@ -82,6 +69,5 @@ run() {
     echo "Done"
 }
 
-#cleanup
-#setup_manual
 run
+#setup_manual
