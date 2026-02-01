@@ -86,7 +86,7 @@ async function getClient(scheme: string, host: string, port: number): Promise<{ 
         //   4. At some point, the listener responds. We intercept that response in the 'message'
         //      event listener. This event listener reads the ID and matches it against the pending
         //      map. If a match is found, the listener calls the resolver function
-        function send(method: string, params: any = {}) {
+        function send(method: string, params: any = {}): Promise<any> {
             id += 1;
             const payload = { id, method, params }
             socket.send(JSON.stringify(payload));

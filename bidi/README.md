@@ -205,3 +205,64 @@ Braindump:
     this creates a promise that resolves in 300ms, returning 'foo'. our example is one leg up though - instead of resolving the promise in the constructor, we actually save a reference to the resolve function in our mapping! this is important - we create the promise in send(), but we actually have to wait until the event listener has a corresponding message on the reading end to get our result.
 
     speaking of the reading end: the logic here is pretty simple. whenever a message comes in from the driver, the message listener unpacks it to find the message id. it searches for said message id in the mapping and calls the relevant resolver function with the result. 
+
+
+ok i ended up going a little farther and moving this to typescript. typescript is honestly really nice to use, it feels like python a little bit. i have a strong preference for type hints and i generally like the look of typescript way more than javascript.
+
+the main extensions are pretty straightforward. similar to python, you can add types on arguments. so this:
+
+```javascript
+function add(a, b) { return a + b }
+```
+
+becomes this:
+
+```typescript
+function add(a: number, b: number): number {
+    return a + b
+}
+```
+
+the most difficult type i had to maneuver was `getClient(scheme: string, host: string, port: number): ???`
+i started by asking chatgpt, which give me the right answer:
+
+```typescript
+async function getClient(scheme: string, host: string, port: number): Promise<{ send: (method: string, params?: any = {}) => Promise<any> }> {
+}
+```
+
+* the thing that it returns is an object
+
+    ```typescript
+    {}
+    ```
+
+* that object has one function on it, 'send'
+
+    ```typescript
+    { send }
+
+    ```
+* that 'send' function takes in a method and an optional params. that params can be anything but defaults to {}
+
+    ```typescript
+    { send: (method: string, params?: any = {}) }
+
+* send returns a promise. the promise will return a result. we will be lazy and just say 'any'
+
+    ```typescript
+    { send: (method: string, params?: any = {}) => Promise<any> }
+
+* getClient is an async function, so it always returns a promise. the promise's type is what we just said above ^
+
+    ```typescript
+    Promise<{ send: (method: string, params?: any = {}) => Promise<any> }>
+    ```
+
+reading types does not "come naturally to me" - i had to sound this one out a couple times to really wrap my head around it
+
+the way you import modules is a little different. i let chatgpt handle that for now. newer versions of node can run typescript
+directly, so i was able to run `node client.ts` to run the client with no issues. the `node` repl is just pure javascript though.
+apparently there _are_ typescript based REPLs, but the one i tried to use was broken. i didn't prod further.
+
+
