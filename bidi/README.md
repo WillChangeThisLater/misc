@@ -265,4 +265,43 @@ the way you import modules is a little different. i let chatgpt handle that for 
 directly, so i was able to run `node client.ts` to run the client with no issues. the `node` repl is just pure javascript though.
 apparently there _are_ typescript based REPLs, but the one i tried to use was broken. i didn't prod further.
 
+usually ugly typehints are a sign you should be making classes. so i did.
 
+```typescript
+class BiDiClient {
+
+    pending = new Map();
+    id: number = 0;
+    socket: WebSocket;
+
+    public constructor(socket: WebSocket) {
+
+        this.socket = socket
+
+        // add an event listener on the socket
+        // big assumption here is that the socket is open for business
+        // bad things can happen if not
+	this.socket.addEventListener("message", event => {
+            const msg = JSON.parse(event.data)
+            if (msg.id != null) {
+                const resolve = this.pending.get(msg.id)
+                if (resolve) {
+                    this.pending.delete(msg.id)
+                    resolve(msg)
+                }
+            }
+        });
+    }
+
+
+    public send(method: string, params: any = {}): Promise<any> {
+        this.id += 1;
+        const id = this.id
+        const payload = { id, method, params }
+        this.socket.send(JSON.stringify(payload));
+        return new Promise((resolver) => this.pending.set(this.id, resolver))
+    }
+}
+```
+
+this is pretty code.
